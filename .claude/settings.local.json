@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest web --typescript --tailwind --app --no-src-dir --import-alias \"@/*\" --no-eslint)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(npx prisma *)",
+      "PowerShell(Stop-Process *)",
+      "Bash(npx tsc *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('main:', d.get\\('main'\\)\\); print\\('module:', d.get\\('module'\\)\\); print\\('exports:', json.dumps\\(d.get\\('exports', {}\\), indent=2\\)[:500]\\)\")",
+      "Bash(node *)",
+      "Bash(start /B cmd /C \"npm run dev > C:\\\\Users\\\\minhw\\\\AppData\\\\Local\\\\Temp\\\\devplaza-dev.log 2>&1\")",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(Start-Process -FilePath \"cmd.exe\" -ArgumentList \"/k\",\"cd /d C:\\\\Users\\\\minhw\\\\Desktop\\\\Dico_JJAP\\\\devplaza\\\\apps\\\\socket-server && npx ts-node index.ts\" -WindowStyle Normal)",
+      "PowerShell(Start-Process -FilePath \"cmd.exe\" -ArgumentList \"/k\",\"cd /d C:\\\\Users\\\\minhw\\\\Desktop\\\\Dico_JJAP\\\\devplaza\\\\apps\\\\web && npm run dev\" -WindowStyle Normal)",
+      "PowerShell(Receive-Job *)",
+      "PowerShell(netstat *)",
+      "PowerShell(try { $r = Invoke-WebRequest \"http://localhost:3000\" -TimeoutSec 3 -UseBasicParsing; \"Next.js 3000: OK \\($\\($r.StatusCode\\)\\)\" } catch { \"Next.js 3000: $\\($_.Exception.Message\\)\" }; try { $r2 = Invoke-WebRequest \"http://localhost:4000/health\" -TimeoutSec 3 -UseBasicParsing; \"Socket 4000: OK \\($\\($r2.StatusCode\\)\\) - $\\($r2.Content\\)\" } catch { \"Socket 4000: $\\($_.Exception.Message\\)\" })"
+    ]
+  }
+}

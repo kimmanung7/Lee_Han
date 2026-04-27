@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../apps/web/node_modules/.prisma/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  githubId     String    @unique
+  username     String    @unique
+  name         String
+  avatarUrl    String
+  bio          String?
+  githubUrl    String
+
+  topLanguages String[]
+  totalStars   Int       @default(0)
+  totalRepos   Int       @default(0)
+  followers    Int       @default(0)
+  level        UserLevel @default(NEWCOMER)
+
+  nickname  String?
+  gender    String?
+  skinColor String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rooms      RoomMember[]
+  messages   Message[]
+  ownedRooms Room[]       @relation("RoomOwner")
+}
+
+model Room {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isPublic    Boolean  @default(true)
+  maxMembers  Int      @default(10)
+  tags        String[]
+
+  ownerId String
+  owner   User   @relation("RoomOwner", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members  RoomMember[]
+  messages Message[]
+}
+
+model RoomMember {
+  userId   String
+  roomId   String
+  joinedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  room Room @relation(fields: [roomId], references: [id])
+
+  @@id([userId, roomId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+
+  userId String
+  roomId String
+  user   User @relation(fields: [userId], references: [id])
+  room   Room @relation(fields: [roomId], references: [id])
+}
+
+enum UserLevel {
+  NEWCOMER
+  JUNIOR
+  SENIOR
+  EXPERT
+  LEGEND
+}

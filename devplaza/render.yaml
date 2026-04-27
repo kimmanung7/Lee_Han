@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: devplaza-socket
+    runtime: node
+    rootDir: apps/socket-server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: ALLOWED_ORIGIN
+        sync: false
+    autoDeploy: true
