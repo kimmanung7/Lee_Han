@@ -140,7 +140,7 @@ export class WorldScene extends Phaser.Scene {
     });
 
     s.on("player:moved", ({ userId, x, y }: { userId: string; x: number; y: number; direction: string }) => {
-      this.otherPlayers.get(userId)?.moveTo(x, y);
+      this.otherPlayers.get(userId)?.moveToPosition(x, y);
     });
 
     s.on("player:leave", ({ userId }: { userId: string }) => {

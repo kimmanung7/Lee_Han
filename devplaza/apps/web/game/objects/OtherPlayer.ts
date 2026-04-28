@@ -47,7 +47,7 @@ export class OtherPlayer extends Phaser.GameObjects.Container {
     this.setDepth(9);
   }
 
-  moveTo(x: number, y: number) {
+  moveToPosition(x: number, y: number) {
     this.scene.tweens.add({
       targets: this,
       x,
