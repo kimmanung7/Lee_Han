@@ -31,9 +31,28 @@ io.on("connection", (socket: Socket) => {
   // ── World ──────────────────────────────────────────────────────────
   socket.on(
     "player:join",
-    (data: { userId: string; nickname: string; gender: string; skinColor: string }) => {
+    (data: { userId: string; nickname: string; gender: string; skinColor: string; x: number; y: number }) => {
       users.set(socket.id, { socketId: socket.id, ...data });
       socket.join("world");
+
+      // Send current players to newcomer
+      const present = [...users.entries()]
+        .filter(([sid]) => sid !== socket.id)
+        .map(([, u]) => u)
+        .filter((u) => !u.buildingId);
+      socket.emit("world:players", present);
+
+      // Notify others about newcomer
+      socket.to("world").emit("player:joined", { ...data });
+    },
+  );
+
+  socket.on(
+    "player:move",
+    ({ x, y, direction }: { x: number; y: number; direction: string }) => {
+      const user = users.get(socket.id);
+      if (!user) return;
+      socket.to("world").emit("player:moved", { userId: user.userId, x, y, direction });
     },
   );
 
@@ -146,10 +165,11 @@ io.on("connection", (socket: Socket) => {
   // ── Disconnect ─────────────────────────────────────────────────────
   socket.on("disconnect", () => {
     const user = users.get(socket.id);
-    if (user?.buildingId) {
-      socket.to(`building:${user.buildingId}`).emit("building:user_left", {
-        userId: user.userId,
-      });
+    if (user) {
+      if (user.buildingId) {
+        socket.to(`building:${user.buildingId}`).emit("building:user_left", { userId: user.userId });
+      }
+      socket.to("world").emit("player:leave", { userId: user.userId });
     }
     users.delete(socket.id);
     console.log(`[-] ${socket.id} (${user?.nickname ?? "unknown"})`);

@@ -10,12 +10,12 @@ export function getSocket(): Socket {
   return _socket;
 }
 
-export function connectSocket(userId: string, nickname: string, gender: string, skinColor: string): void {
+export function connectSocket(userId: string, nickname: string, gender: string, skinColor: string, x = 0, y = 0): void {
   const s = getSocket();
   if (s.connected) return;
   s.connect();
   s.once("connect", () => {
-    s.emit("player:join", { userId, nickname, gender, skinColor });
+    s.emit("player:join", { userId, nickname, gender, skinColor, x, y });
   });
 }
 

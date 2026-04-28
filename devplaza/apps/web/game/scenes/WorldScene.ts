@@ -2,6 +2,7 @@ import Phaser from "@/game/phaser-compat";
 import { BUILDINGS } from "@/game/data/buildings";
 import { connectSocket, getSocket } from "@/game/utils/socketManager";
 import { ChatBubble } from "@/game/objects/ChatBubble";
+import { OtherPlayer } from "@/game/objects/OtherPlayer";
 
 const WORLD_W = 3200;
 const WORLD_H = 2400;
@@ -27,6 +28,9 @@ export class WorldScene extends Phaser.Scene {
   private playerLabel!: Phaser.GameObjects.Text;
   private playerBubble: ChatBubble | null = null;
   private entryPrompt!: Phaser.GameObjects.Text;
+  private otherPlayers = new Map<string, OtherPlayer>();
+  private lastEmitX = 0;
+  private lastEmitY = 0;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -107,13 +111,48 @@ export class WorldScene extends Phaser.Scene {
 
     // Connect socket
     const { userId, nickname, gender, skinColor } = this.userConfig;
-    if (userId) connectSocket(userId, nickname, gender, skinColor);
+    if (userId) connectSocket(userId, nickname, gender, skinColor, startX, startY);
+    this.setupSocketListeners();
 
     // Cleanup on scene stop
     this.events.once("shutdown", () => {
       window.removeEventListener("devplaza:chat:send", this.chatHandler);
-      getSocket().off("world:chat:message");
+      const s = getSocket();
+      s.off("world:players");
+      s.off("player:joined");
+      s.off("player:moved");
+      s.off("player:leave");
+      s.off("world:chat:message");
     });
+  }
+
+  // ── Socket listeners ─────────────────────────────────────────────────
+
+  private setupSocketListeners() {
+    const s = getSocket();
+
+    s.on("world:players", (players: { userId: string; nickname: string; gender: string; skinColor: string; x: number; y: number }[]) => {
+      players.forEach((p) => this.spawnOtherPlayer(p));
+    });
+
+    s.on("player:joined", (p: { userId: string; nickname: string; gender: string; skinColor: string; x: number; y: number }) => {
+      this.spawnOtherPlayer(p);
+    });
+
+    s.on("player:moved", ({ userId, x, y }: { userId: string; x: number; y: number; direction: string }) => {
+      this.otherPlayers.get(userId)?.moveTo(x, y);
+    });
+
+    s.on("player:leave", ({ userId }: { userId: string }) => {
+      const op = this.otherPlayers.get(userId);
+      if (op) { op.destroy(); this.otherPlayers.delete(userId); }
+    });
+  }
+
+  private spawnOtherPlayer(p: { userId: string; nickname: string; gender: string; skinColor: string; x?: number; y?: number }) {
+    if (this.otherPlayers.has(p.userId)) return;
+    const op = new OtherPlayer(this, p.x ?? WORLD_W / 2, p.y ?? WORLD_H / 2, p.gender, p.skinColor, p.nickname);
+    this.otherPlayers.set(p.userId, op);
   }
 
   // ── Chat ─────────────────────────────────────────────────────────────
@@ -194,16 +233,26 @@ export class WorldScene extends Phaser.Scene {
     const isTyping = document.activeElement?.tagName === "INPUT";
     const body = this.player.body as Phaser.Physics.Arcade.Body;
 
+    let vx = 0, vy = 0;
     if (isTyping) {
       body.setVelocity(0, 0);
     } else {
-      let vx = 0, vy = 0;
       if (this.wasd.left.isDown  || this.cursors.left.isDown)  vx = -SPEED;
       else if (this.wasd.right.isDown || this.cursors.right.isDown) vx = SPEED;
       if (this.wasd.up.isDown    || this.cursors.up.isDown)    vy = -SPEED;
       else if (this.wasd.down.isDown  || this.cursors.down.isDown)  vy = SPEED;
       if (vx !== 0 && vy !== 0) { const d = 1 / Math.SQRT2; vx *= d; vy *= d; }
       body.setVelocity(vx, vy);
+    }
+
+    // Emit position if moved
+    const dx = Math.abs(this.player.x - this.lastEmitX);
+    const dy = Math.abs(this.player.y - this.lastEmitY);
+    if (dx > 4 || dy > 4) {
+      const direction = vx < 0 ? "left" : vx > 0 ? "right" : vy < 0 ? "up" : "down";
+      getSocket().emit("player:move", { x: this.player.x, y: this.player.y, direction });
+      this.lastEmitX = this.player.x;
+      this.lastEmitY = this.player.y;
     }
 
     // Labels & bubble follow player
