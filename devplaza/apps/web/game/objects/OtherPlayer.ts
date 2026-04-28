@@ -1,4 +1,5 @@
 import Phaser from "@/game/phaser-compat";
+import { ChatBubble } from "@/game/objects/ChatBubble";
 
 const SKIN_COLORS: Record<string, number> = {
   light: 0xfddbb4,
@@ -10,6 +11,7 @@ const SKIN_COLORS: Record<string, number> = {
 export class OtherPlayer extends Phaser.GameObjects.Container {
   private sprite!: Phaser.GameObjects.Image;
   private label!: Phaser.GameObjects.Text;
+  private bubble: ChatBubble | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -45,6 +47,18 @@ export class OtherPlayer extends Phaser.GameObjects.Container {
     this.add([this.sprite, this.label]);
     scene.add.existing(this);
     this.setDepth(9);
+  }
+
+  showBubble(message: string) {
+    this.bubble?.destroy();
+    this.bubble = new ChatBubble(this.scene, message);
+    this.bubble.setPosition(this.x, this.y - 12);
+  }
+
+  tickBubble() {
+    if (this.bubble?.active) {
+      this.bubble.setPosition(this.x, this.y - 12);
+    }
   }
 
   moveToPosition(x: number, y: number) {

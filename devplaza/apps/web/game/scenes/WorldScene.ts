@@ -172,9 +172,8 @@ export class WorldScene extends Phaser.Scene {
 
     window.addEventListener("devplaza:chat:send", this.chatHandler);
 
-    // Receive world chat from other players (shown when world players are added)
-    getSocket().on("world:chat:message", () => {
-      // Future: find remote player sprite and show bubble
+    getSocket().on("world:chat:message", ({ userId, content }: { userId: string; nickname: string; content: string }) => {
+      this.otherPlayers.get(userId)?.showBubble(content);
     });
   }
 
@@ -254,6 +253,9 @@ export class WorldScene extends Phaser.Scene {
       this.lastEmitX = this.player.x;
       this.lastEmitY = this.player.y;
     }
+
+    // Other players' bubbles follow their sprites
+    this.otherPlayers.forEach((op) => op.tickBubble());
 
     // Labels & bubble follow player
     this.playerLabel.setPosition(this.player.x, this.player.y - 16);
