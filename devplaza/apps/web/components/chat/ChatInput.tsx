@@ -78,7 +78,7 @@ export default function ChatInput() {
         onChange={(e) => setValue(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        onKeyDown={(e) => { if (e.key === "Enter") e.stopPropagation(); }}
+        onKeyDown={(e) => { e.stopPropagation(); }}
         placeholder={focused ? "메시지를 입력하세요…" : ""}
         maxLength={120}
         autoComplete="off"
