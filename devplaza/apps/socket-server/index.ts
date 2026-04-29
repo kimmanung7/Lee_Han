@@ -24,9 +24,47 @@ interface UserData {
 }
 
 const users = new Map<string, UserData>();
+const userSocketMap = new Map<string, string>(); // userId → socketId
 
 io.on("connection", (socket: Socket) => {
   console.log(`[+] ${socket.id}`);
+
+  // ── User register (lobby / DM) ─────────────────────────────────────
+  socket.on("user:register", ({ userId }: { userId: string }) => {
+    userSocketMap.set(userId, socket.id);
+  });
+
+  // ── DM ────────────────────────────────────────────────────────────
+  socket.on(
+    "dm:send",
+    ({ toUserId, message }: { toUserId: string; message: { id: string; content: string; createdAt: string; sender: { id: string; nickname: string | null; avatarUrl: string } } }) => {
+      const targetSocketId = userSocketMap.get(toUserId);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit("dm:message", message);
+      }
+    },
+  );
+
+  // ── Friend notify ──────────────────────────────────────────────────
+  socket.on(
+    "friend:notify",
+    ({ toUserId, from }: { toUserId: string; from: { id: string; nickname: string | null; username: string; avatarUrl: string } }) => {
+      const targetSocketId = userSocketMap.get(toUserId);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit("friend:request", { from });
+      }
+    },
+  );
+
+  socket.on(
+    "friend:accepted:notify",
+    ({ toUserId, by }: { toUserId: string; by: { id: string; nickname: string | null; username: string } }) => {
+      const targetSocketId = userSocketMap.get(toUserId);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit("friend:accepted", { by });
+      }
+    },
+  );
 
   // ── World ──────────────────────────────────────────────────────────
   socket.on(
@@ -170,6 +208,9 @@ io.on("connection", (socket: Socket) => {
         socket.to(`building:${user.buildingId}`).emit("building:user_left", { userId: user.userId });
       }
       socket.to("world").emit("player:leave", { userId: user.userId });
+      if (userSocketMap.get(user.userId) === socket.id) {
+        userSocketMap.delete(user.userId);
+      }
     }
     users.delete(socket.id);
     console.log(`[-] ${socket.id} (${user?.nickname ?? "unknown"})`);

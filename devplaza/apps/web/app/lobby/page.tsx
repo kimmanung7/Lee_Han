@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import PixelCharacter from "@/components/PixelCharacter";
+import FriendPanel from "@/components/friends/FriendPanel";
 
 const LEVEL_BADGE: Record<string, { label: string; color: string }> = {
   NEWCOMER: { label: "Newcomer", color: "bg-gray-600 text-gray-200" },
@@ -40,12 +41,10 @@ export default async function LobbyPage() {
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left — Friends (placeholder) */}
-        <aside className="w-56 border-r border-gray-800 bg-gray-900 flex flex-col p-4 shrink-0">
+        {/* Left — Friends */}
+        <aside className="w-56 border-r border-gray-800 bg-gray-900 flex flex-col p-4 shrink-0 overflow-hidden">
           <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">친구</p>
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-gray-700 text-xs text-center">친구 기능<br />준비 중</p>
-          </div>
+          <FriendPanel myId={user.id} myNickname={user.nickname ?? null} />
         </aside>
 
         {/* Main — Character room */}
