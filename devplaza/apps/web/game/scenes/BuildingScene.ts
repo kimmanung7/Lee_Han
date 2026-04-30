@@ -2,17 +2,11 @@ import Phaser from "@/game/phaser-compat";
 import { ChatBubble } from "@/game/objects/ChatBubble";
 import { getSocket, connectSocket } from "@/game/utils/socketManager";
 
-// Interior world dimensions
 const ROOM_W = 960;
 const ROOM_H = 640;
 const SPEED = 140;
-
-const SKIN_COLORS: Record<string, number> = {
-  light: 0xfddbb4,
-  tan: 0xe8a87c,
-  medium: 0xc68642,
-  dark: 0x8d5524,
-};
+const CHAR_SCALE = 0.15;
+const LABEL_OFFSET_Y = Math.round(280 * CHAR_SCALE / 2) + 4;
 
 interface SceneData {
   buildingId: string;
@@ -141,17 +135,17 @@ export class BuildingScene extends Phaser.Scene {
 
   private createLocalPlayer() {
     const { nickname, gender, skinColor } = this.sceneData;
-    const texKey = this.ensurePlayerTexture(`p_${gender}_${skinColor}`, gender, skinColor);
-
     const startX = ROOM_W / 2;
     const startY = ROOM_H - 120;
 
-    this.player = this.physics.add.sprite(startX, startY, texKey);
+    this.player = this.physics.add.sprite(startX, startY, "char_front_idle");
+    this.player.setScale(CHAR_SCALE);
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
+    this.player.play("anim_front_idle");
 
     this.playerLabel = this.add
-      .text(startX, startY - 18, nickname, {
+      .text(startX, startY - LABEL_OFFSET_Y, nickname, {
         fontSize: "9px",
         color: "#ccddff",
         fontFamily: "monospace",
@@ -267,17 +261,16 @@ export class BuildingScene extends Phaser.Scene {
   private spawnRemotePlayer(u: { userId: string; nickname: string; gender: string; skinColor: string }) {
     if (this.remotePlayers.has(u.userId)) return;
 
-    const texKey = this.ensurePlayerTexture(`p_${u.gender}_${u.skinColor}`, u.gender, u.skinColor);
-
-    // Random position spread around the room center
     const spread = 200;
     const rx = ROOM_W / 2 + (Math.random() - 0.5) * spread * 2;
     const ry = ROOM_H / 2 + (Math.random() - 0.5) * spread;
 
-    const sprite = this.physics.add.sprite(rx, ry, texKey).setDepth(10);
+    const sprite = this.physics.add.sprite(rx, ry, "char_front_idle")
+      .setScale(CHAR_SCALE).setDepth(10);
+    sprite.play("anim_front_idle");
 
     const label = this.add
-      .text(rx, ry - 18, u.nickname, {
+      .text(rx, ry - LABEL_OFFSET_Y, u.nickname, {
         fontSize: "9px",
         color: "#aabbdd",
         fontFamily: "monospace",
@@ -306,26 +299,10 @@ export class BuildingScene extends Phaser.Scene {
     this.remotePlayers.delete(userId);
   }
 
-  // ── Texture factory ───────────────────────────────────────────────────
+  // ── Texture factory (removed — using wonhyukc sprites) ───────────────
 
-  private ensurePlayerTexture(key: string, gender: string, skinColor: string): string {
-    if (this.textures.exists(key)) return key;
-
-    const skinHex = SKIN_COLORS[skinColor] ?? SKIN_COLORS.light;
-    const shirtHex = gender === "FEMALE" ? 0xe87da8 : 0x4a90d9;
-
-    const g = this.make.graphics();
-    g.fillStyle(skinHex, 1);
-    g.fillRect(3, 0, 10, 8);    // head
-    g.fillStyle(shirtHex, 1);
-    g.fillRect(2, 8, 12, 10);   // body
-    g.fillStyle(0x2c3e50, 1);
-    g.fillRect(3, 18, 4, 6);    // left leg
-    g.fillRect(9, 18, 4, 6);    // right leg
-    g.generateTexture(key, 16, 24);
-    g.destroy();
-
-    return key;
+  private ensurePlayerTexture(_key: string, _gender: string, _skinColor: string): string {
+    return "char_front_idle";
   }
 
   // ── Leave building ────────────────────────────────────────────────────
@@ -371,14 +348,14 @@ export class BuildingScene extends Phaser.Scene {
     }
 
     // Local player label + bubble follow
-    this.playerLabel.setPosition(this.player.x, this.player.y - 18);
+    this.playerLabel.setPosition(this.player.x, this.player.y - LABEL_OFFSET_Y);
     if (this.playerBubble?.active) {
       this.playerBubble.setPosition(this.player.x, this.player.y - 12);
     }
 
     // Remote player labels + bubbles follow their sprites
     this.remotePlayers.forEach((remote) => {
-      remote.label.setPosition(remote.sprite.x, remote.sprite.y - 18);
+      remote.label.setPosition(remote.sprite.x, remote.sprite.y - LABEL_OFFSET_Y);
       if (remote.bubble?.active) {
         remote.bubble.setPosition(remote.sprite.x, remote.sprite.y - 12);
       }

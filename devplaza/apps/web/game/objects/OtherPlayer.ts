@@ -1,42 +1,23 @@
 import Phaser from "@/game/phaser-compat";
 import { ChatBubble } from "@/game/objects/ChatBubble";
 
-const SKIN_COLORS: Record<string, number> = {
-  light: 0xfddbb4,
-  tan:   0xe8a87c,
-  medium: 0xc68642,
-  dark:  0x8d5524,
-};
+const CHAR_SCALE = 0.15;
+const LABEL_OFFSET_Y = Math.round(280 * CHAR_SCALE / 2) + 4;
+const BUBBLE_OFFSET_Y = Math.round(280 * CHAR_SCALE / 2) + 6;
 
 export class OtherPlayer extends Phaser.GameObjects.Container {
-  private sprite!: Phaser.GameObjects.Image;
+  private sprite!: Phaser.GameObjects.Sprite;
   private label!: Phaser.GameObjects.Text;
   private bubble: ChatBubble | null = null;
+  private lastDirection = "down";
 
-  constructor(
-    scene: Phaser.Scene,
-    x: number,
-    y: number,
-    gender: string,
-    skinColor: string,
-    nickname: string,
-  ) {
+  constructor(scene: Phaser.Scene, x: number, y: number, _gender: string, _skinColor: string, nickname: string) {
     super(scene, x, y);
 
-    const textureKey = `other_${gender}_${skinColor}`;
-    if (!scene.textures.exists(textureKey)) {
-      const skinHex = SKIN_COLORS[skinColor] ?? SKIN_COLORS.light;
-      const shirtHex = gender === "FEMALE" ? 0xe87da8 : 0x4a90d9;
-      const g = scene.make.graphics();
-      g.fillStyle(skinHex, 1);  g.fillRect(3, 0, 10, 8);
-      g.fillStyle(shirtHex, 1); g.fillRect(2, 8, 12, 10);
-      g.fillStyle(0x2c3e50, 1); g.fillRect(3, 18, 4, 6); g.fillRect(9, 18, 4, 6);
-      g.generateTexture(textureKey, 16, 24);
-      g.destroy();
-    }
+    this.sprite = scene.add.sprite(0, 0, "char_front_idle").setScale(CHAR_SCALE);
+    this.sprite.play("anim_front_idle");
 
-    this.sprite = scene.add.image(0, 0, textureKey);
-    this.label = scene.add.text(0, -16, nickname, {
+    this.label = scene.add.text(0, -LABEL_OFFSET_Y, nickname, {
       fontSize: "9px",
       color: "#ccccff",
       fontFamily: "monospace",
@@ -52,22 +33,43 @@ export class OtherPlayer extends Phaser.GameObjects.Container {
   showBubble(message: string) {
     this.bubble?.destroy();
     this.bubble = new ChatBubble(this.scene, message);
-    this.bubble.setPosition(this.x, this.y - 12);
+    this.bubble.setPosition(this.x, this.y - BUBBLE_OFFSET_Y);
   }
 
   tickBubble() {
     if (this.bubble?.active) {
-      this.bubble.setPosition(this.x, this.y - 12);
+      this.bubble.setPosition(this.x, this.y - BUBBLE_OFFSET_Y);
     }
   }
 
   moveToPosition(x: number, y: number) {
+    const dx = x - this.x;
+    const dy = y - this.y;
+
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      this.lastDirection = dx > 0 ? "right" : "left";
+      this.sprite.setFlipX(dx < 0);
+      if (this.sprite.anims.currentAnim?.key !== "anim_side_walk") this.sprite.play("anim_side_walk");
+    } else {
+      this.lastDirection = dy > 0 ? "down" : "up";
+      this.sprite.setFlipX(false);
+      const anim = dy > 0 ? "anim_front_walk" : "anim_back_walk";
+      if (this.sprite.anims.currentAnim?.key !== anim) this.sprite.play(anim);
+    }
+
     this.scene.tweens.add({
       targets: this,
       x,
       y,
       duration: 100,
       ease: "Linear",
+      onComplete: () => {
+        const idleAnim =
+          this.lastDirection === "up" ? "anim_back_idle" :
+          (this.lastDirection === "left" || this.lastDirection === "right") ? "anim_side_idle" :
+          "anim_front_idle";
+        this.sprite.play(idleAnim);
+      },
     });
   }
 }

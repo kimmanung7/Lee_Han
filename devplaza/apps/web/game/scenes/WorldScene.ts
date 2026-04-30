@@ -9,12 +9,7 @@ const WORLD_H = 2400;
 const SPEED = 180;
 const ENTRY_RADIUS = 70;
 
-const SKIN_COLORS: Record<string, number> = {
-  light: 0xfddbb4,
-  tan: 0xe8a87c,
-  medium: 0xc68642,
-  dark: 0x8d5524,
-};
+const CHAR_SCALE = 0.15;
 
 interface UserConfig {
   userId: string;
@@ -31,6 +26,7 @@ export class WorldScene extends Phaser.Scene {
   private otherPlayers = new Map<string, OtherPlayer>();
   private lastEmitX = 0;
   private lastEmitY = 0;
+  private lastDirection = "down";
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -60,17 +56,19 @@ export class WorldScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
 
     this.drawMap();
-    this.buildPlayerTexture();
 
     const startX = WORLD_W / 2;
     const startY = WORLD_H / 2;
 
-    this.player = this.physics.add.sprite(startX, startY, "player_sprite");
+    this.player = this.physics.add.sprite(startX, startY, "char_front_idle");
+    this.player.setScale(CHAR_SCALE);
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
+    this.player.play("anim_front_idle");
 
+    const labelOffsetY = Math.round(280 * CHAR_SCALE / 2) + 4;
     this.playerLabel = this.add
-      .text(startX, startY - 20, this.userConfig.nickname, {
+      .text(startX, startY - labelOffsetY, this.userConfig.nickname, {
         fontSize: "9px",
         color: "#ffffff",
         fontFamily: "monospace",
@@ -165,7 +163,7 @@ export class WorldScene extends Phaser.Scene {
 
       this.playerBubble?.destroy();
       this.playerBubble = new ChatBubble(this, content.trim());
-      this.playerBubble.setPosition(this.player.x, this.player.y - 12);
+      this.playerBubble.setPosition(this.player.x, this.player.y - Math.round(280 * CHAR_SCALE / 2) - 6);
 
       getSocket().emit("world:chat:send", { content: content.trim() });
     };
@@ -175,22 +173,6 @@ export class WorldScene extends Phaser.Scene {
     getSocket().on("world:chat:message", ({ userId, content }: { userId: string; nickname: string; content: string }) => {
       this.otherPlayers.get(userId)?.showBubble(content);
     });
-  }
-
-  // ── Player texture ────────────────────────────────────────────────────
-
-  private buildPlayerTexture() {
-    if (this.textures.exists("player_sprite")) return;
-    const { gender, skinColor } = this.userConfig;
-    const skinHex = SKIN_COLORS[skinColor] ?? SKIN_COLORS.light;
-    const shirtHex = gender === "FEMALE" ? 0xe87da8 : 0x4a90d9;
-
-    const g = this.make.graphics();
-    g.fillStyle(skinHex, 1);  g.fillRect(3, 0, 10, 8);
-    g.fillStyle(shirtHex, 1); g.fillRect(2, 8, 12, 10);
-    g.fillStyle(0x2c3e50, 1); g.fillRect(3, 18, 4, 6); g.fillRect(9, 18, 4, 6);
-    g.generateTexture("player_sprite", 16, 24);
-    g.destroy();
   }
 
   // ── Map ───────────────────────────────────────────────────────────────
@@ -244,12 +226,32 @@ export class WorldScene extends Phaser.Scene {
       body.setVelocity(vx, vy);
     }
 
+    // Animation
+    const moving = vx !== 0 || vy !== 0;
+    if (moving) {
+      if (Math.abs(vx) >= Math.abs(vy)) {
+        this.lastDirection = vx > 0 ? "right" : "left";
+        this.player.setFlipX(vx < 0);
+        if (this.player.anims.currentAnim?.key !== "anim_side_walk") this.player.play("anim_side_walk");
+      } else {
+        this.lastDirection = vy > 0 ? "down" : "up";
+        this.player.setFlipX(false);
+        const anim = vy > 0 ? "anim_front_walk" : "anim_back_walk";
+        if (this.player.anims.currentAnim?.key !== anim) this.player.play(anim);
+      }
+    } else {
+      const idleAnim =
+        this.lastDirection === "up" ? "anim_back_idle" :
+        (this.lastDirection === "left" || this.lastDirection === "right") ? "anim_side_idle" :
+        "anim_front_idle";
+      if (this.player.anims.currentAnim?.key !== idleAnim) this.player.play(idleAnim);
+    }
+
     // Emit position if moved
     const dx = Math.abs(this.player.x - this.lastEmitX);
     const dy = Math.abs(this.player.y - this.lastEmitY);
     if (dx > 4 || dy > 4) {
-      const direction = vx < 0 ? "left" : vx > 0 ? "right" : vy < 0 ? "up" : "down";
-      getSocket().emit("player:move", { x: this.player.x, y: this.player.y, direction });
+      getSocket().emit("player:move", { x: this.player.x, y: this.player.y, direction: this.lastDirection });
       this.lastEmitX = this.player.x;
       this.lastEmitY = this.player.y;
     }
@@ -257,10 +259,11 @@ export class WorldScene extends Phaser.Scene {
     // Other players' bubbles follow their sprites
     this.otherPlayers.forEach((op) => op.tickBubble());
 
+    const labelOffsetY = Math.round(280 * CHAR_SCALE / 2) + 4;
     // Labels & bubble follow player
-    this.playerLabel.setPosition(this.player.x, this.player.y - 16);
+    this.playerLabel.setPosition(this.player.x, this.player.y - labelOffsetY);
     if (this.playerBubble?.active) {
-      this.playerBubble.setPosition(this.player.x, this.player.y - 12);
+      this.playerBubble.setPosition(this.player.x, this.player.y - Math.round(280 * CHAR_SCALE / 2) - 6);
     }
 
     // ── Building proximity ──────────────────────────────────────────
