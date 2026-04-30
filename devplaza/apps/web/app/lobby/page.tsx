@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import PixelCharacter from "@/components/PixelCharacter";
 import FriendPanel from "@/components/friends/FriendPanel";
 
 const LEVEL_BADGE: Record<string, { label: string; color: string }> = {
@@ -70,7 +69,12 @@ export default async function LobbyPage() {
               >
                 {user.nickname}
               </div>
-              <PixelCharacter gender={gender} skinColor={skinColor} pixelSize={20} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/assets/sprites/wonhyukc/front_idle.png"
+                alt="character"
+                style={{ width: 96, imageRendering: "pixelated" }}
+              />
             </div>
           </div>
 
