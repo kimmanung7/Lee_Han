@@ -7,14 +7,63 @@ const FRAMES = [
   "side_idle",  "side_walk1",  "side_walk2",
 ];
 
+const TILESETS = [
+  "gather_islands_1.0",
+  "gather_floors_2_exploration",
+  "floors_3_simple_S-20C-5",
+  "gather_avatars_1.0",
+  "gather_chairs_1.3",
+  "gather_decoration_1.21",
+  "gather_decoration_exterior_1.3",
+  "gather_doors_template",
+  "gather_exterior_roofs_2.1",
+  "gather_exterior_walls_2.1",
+  "gather_facade_elements_1.2",
+  "gather_floors_1.5",
+  "gather_interior_walls_1.6",
+  "gather_plants_1.2",
+  "gather_signage_1.2",
+  "gather_tables_2.1",
+  "gather_terrains_3.a",
+  "gather_walls_interior_template",
+  "TileAndStone",
+  "toppers",
+  "trimsanddoors",
+  "Wall_unstable",
+  "walltexture",
+  "WindowsObjects",
+  "그림자",
+  "바닥",
+  "섬",
+  "외벽 장식",
+  "외벽",
+  "지붕",
+  "터레인",
+];
+
 export class BootScene extends Phaser.Scene {
   constructor() {
     super({ key: "BootScene" });
   }
 
   preload() {
+    // Loading progress text
+    const { width, height } = this.scale;
+    const loadingText = this.add.text(width / 2, height / 2, "Loading...", {
+      fontSize: "16px", color: "#ffffff", fontFamily: "monospace",
+    }).setOrigin(0.5);
+    this.load.on("progress", (v: number) => {
+      loadingText.setText(`Loading... ${Math.round(v * 100)}%`);
+    });
+
     FRAMES.forEach((name) => {
       this.load.image(`char_${name}`, `${BASE}${name}.png`);
+    });
+
+    this.load.tilemapTiledJSON("worldmap", "/assets/maps/testmap.json");
+
+    TILESETS.forEach((name) => {
+      this.load.image(name, `/assets/tilesets/${encodeURIComponent(name)}.png`);
     });
   }
 

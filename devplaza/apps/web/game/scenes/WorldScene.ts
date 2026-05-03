@@ -1,15 +1,22 @@
 import Phaser from "@/game/phaser-compat";
-import { BUILDINGS } from "@/game/data/buildings";
 import { connectSocket, getSocket } from "@/game/utils/socketManager";
 import { ChatBubble } from "@/game/objects/ChatBubble";
 import { OtherPlayer } from "@/game/objects/OtherPlayer";
 
-const WORLD_W = 3200;
-const WORLD_H = 2400;
+const WORLD_W = 1600;
+const WORLD_H = 1600;
 const SPEED = 180;
-const ENTRY_RADIUS = 70;
-
+const ENTRY_RADIUS = 60;
 const CHAR_SCALE = 0.15;
+
+interface PortalInfo {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  name: string;
+  id: string;
+}
 
 interface UserConfig {
   userId: string;
@@ -27,6 +34,8 @@ export class WorldScene extends Phaser.Scene {
   private lastEmitX = 0;
   private lastEmitY = 0;
   private lastDirection = "down";
+  private collisionLayer: Phaser.Tilemaps.TilemapLayer | null = null;
+  private portals: PortalInfo[] = [];
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -55,7 +64,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
 
-    this.drawMap();
+    this.setupTilemap();
 
     const startX = WORLD_W / 2;
     const startY = WORLD_H / 2;
@@ -65,6 +74,10 @@ export class WorldScene extends Phaser.Scene {
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
     this.player.play("anim_front_idle");
+
+    if (this.collisionLayer) {
+      this.physics.add.collider(this.player, this.collisionLayer);
+    }
 
     const labelOffsetY = Math.round(280 * CHAR_SCALE / 2) + 4;
     this.playerLabel = this.add
@@ -78,7 +91,6 @@ export class WorldScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setDepth(11);
 
-    // Entry prompt — fixed to camera (scrollFactor 0 = screen-space)
     this.entryPrompt = this.add
       .text(0, 0, "", {
         fontSize: "12px",
@@ -107,12 +119,10 @@ export class WorldScene extends Phaser.Scene {
 
     this.setupChat();
 
-    // Connect socket
     const { userId, nickname, gender, skinColor } = this.userConfig;
     if (userId) connectSocket(userId, nickname, gender, skinColor, startX, startY);
     this.setupSocketListeners();
 
-    // Cleanup on scene stop
     this.events.once("shutdown", () => {
       window.removeEventListener("devplaza:chat:send", this.chatHandler);
       const s = getSocket();
@@ -122,6 +132,69 @@ export class WorldScene extends Phaser.Scene {
       s.off("player:leave");
       s.off("world:chat:message");
     });
+  }
+
+  // ── Tilemap ───────────────────────────────────────────────────────────
+
+  private setupTilemap() {
+    const map = this.make.tilemap({ key: "worldmap" });
+
+    // Set images on all tilesets, including duplicates (same name, different firstgid)
+    const seenNames = new Set<string>();
+    (map.tilesets as any[]).forEach((ts) => {
+      const name: string = ts.name;
+      if (!seenNames.has(name)) {
+        map.addTilesetImage(name, name);
+        seenNames.add(name);
+      } else if (this.textures.exists(name)) {
+        ts.setImage(this.textures.get(name));
+      }
+    });
+
+    const allTilesets = map.tilesets;
+
+    // BG layers (depth 1–7, beneath player)
+    const bgLayers = ["BG/길", "BG/문뒤", "BG/장식", "BG/타일", "BG/풀", "BG/건물"];
+    bgLayers.forEach((name, i) => {
+      const layer = map.createLayer(name, allTilesets, 0, 0) as Phaser.Tilemaps.TilemapLayer | null;
+      if (layer) layer.setDepth(i + 1);
+    });
+
+    // Invisible collision layer
+    const colLayer = map.createLayer("BG/충돌레이어", allTilesets, 0, 0) as Phaser.Tilemaps.TilemapLayer | null;
+    if (colLayer) {
+      colLayer.setDepth(0).setVisible(false);
+      colLayer.setCollisionByExclusion([-1, 0]);
+      this.collisionLayer = colLayer;
+    }
+
+    // FG layers (depth 20–25, above player at depth 10)
+    const fgLayers = ["FG/건물상단", "FG/지붕", "FG/2층건물", "FG/2층지붕", "FG/장식", "FG/그림자"];
+    fgLayers.forEach((name, i) => {
+      const layer = map.createLayer(name, allTilesets, 0, 0) as Phaser.Tilemaps.TilemapLayer | null;
+      if (layer) layer.setDepth(20 + i);
+    });
+
+    // Extract portal zones from objectgroup
+    const portalLayer = map.getObjectLayer("포탈");
+    if (portalLayer) {
+      portalLayer.objects.forEach((obj) => {
+        const w = obj.width ?? 0;
+        const h = obj.height ?? 0;
+        const x = obj.x ?? 0;
+        const y = obj.y ?? 0;
+        if (w > 0 && h > 0) {
+          this.portals.push({
+            x: x + w / 2,
+            y: y + h / 2,
+            w,
+            h,
+            name: obj.name || "입장",
+            id: `portal_${obj.id}`,
+          });
+        }
+      });
+    }
   }
 
   // ── Socket listeners ─────────────────────────────────────────────────
@@ -156,7 +229,6 @@ export class WorldScene extends Phaser.Scene {
   // ── Chat ─────────────────────────────────────────────────────────────
 
   private setupChat() {
-    // React input → show local bubble + emit to server
     this.chatHandler = (e: Event) => {
       const { content } = (e as CustomEvent<{ content: string }>).detail;
       if (!content?.trim()) return;
@@ -175,42 +247,9 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  // ── Map ───────────────────────────────────────────────────────────────
-
-  private drawMap() {
-    this.add.rectangle(WORLD_W / 2, WORLD_H / 2, WORLD_W, WORLD_H, 0x0d0d1a);
-
-    const grid = this.add.graphics();
-    grid.lineStyle(1, 0x1a1a3a, 0.9);
-    for (let x = 0; x <= WORLD_W; x += 256) { grid.moveTo(x, 0); grid.lineTo(x, WORLD_H); }
-    for (let y = 0; y <= WORLD_H; y += 256) { grid.moveTo(0, y); grid.lineTo(WORLD_W, y); }
-    grid.strokePath();
-
-    const neon = this.add.graphics();
-    neon.lineStyle(1, 0x003388, 0.07);
-    for (let x = 0; x <= WORLD_W; x += 64) { neon.moveTo(x, 0); neon.lineTo(x, WORLD_H); }
-    for (let y = 0; y <= WORLD_H; y += 64) { neon.moveTo(0, y); neon.lineTo(WORLD_W, y); }
-    neon.strokePath();
-
-    BUILDINGS.forEach(({ x, y, w, h, color, name }) => {
-      this.add.rectangle(x + 4, y + 4, w, h, 0x000000, 0.5);
-      this.add.rectangle(x, y, w, h, color).setStrokeStyle(1, 0x334466, 1);
-      this.add.rectangle(x, y, w + 2, h + 2, 0x000000, 0).setStrokeStyle(1.5, 0x3366bb, 0.35);
-      this.add.text(x, y + h / 2 + 10, name, {
-        fontSize: "8px", color: "#4477aa", fontFamily: "monospace",
-      }).setOrigin(0.5, 0);
-    });
-
-    this.add.circle(WORLD_W / 2, WORLD_H / 2, 90, 0x110011, 0.85).setStrokeStyle(2, 0x6644aa, 0.9);
-    this.add.text(WORLD_W / 2, WORLD_H / 2, "DEVPLAZA\n광장", {
-      fontSize: "11px", color: "#8866cc", fontFamily: "monospace", align: "center",
-    }).setOrigin(0.5, 0.5);
-  }
-
   // ── Update ────────────────────────────────────────────────────────────
 
   update() {
-    // Block WASD/arrows while typing
     const isTyping = document.activeElement?.tagName === "INPUT";
     const body = this.player.body as Phaser.Physics.Arcade.Body;
 
@@ -226,7 +265,6 @@ export class WorldScene extends Phaser.Scene {
       body.setVelocity(vx, vy);
     }
 
-    // Animation
     const moving = vx !== 0 || vy !== 0;
     if (moving) {
       if (Math.abs(vx) >= Math.abs(vy)) {
@@ -247,7 +285,6 @@ export class WorldScene extends Phaser.Scene {
       if (this.player.anims.currentAnim?.key !== idleAnim) this.player.play(idleAnim);
     }
 
-    // Emit position if moved
     const dx = Math.abs(this.player.x - this.lastEmitX);
     const dy = Math.abs(this.player.y - this.lastEmitY);
     if (dx > 4 || dy > 4) {
@@ -256,36 +293,34 @@ export class WorldScene extends Phaser.Scene {
       this.lastEmitY = this.player.y;
     }
 
-    // Other players' bubbles follow their sprites
     this.otherPlayers.forEach((op) => op.tickBubble());
 
     const labelOffsetY = Math.round(280 * CHAR_SCALE / 2) + 4;
-    // Labels & bubble follow player
     this.playerLabel.setPosition(this.player.x, this.player.y - labelOffsetY);
     if (this.playerBubble?.active) {
       this.playerBubble.setPosition(this.player.x, this.player.y - Math.round(280 * CHAR_SCALE / 2) - 6);
     }
 
-    // ── Building proximity ──────────────────────────────────────────
+    // ── Portal proximity ────────────────────────────────────────────────
     const { width, height } = this.cameras.main;
 
-    const nearest = BUILDINGS.find((b) => {
-      const dx = Math.abs(this.player.x - b.x);
-      const dy = Math.abs(this.player.y - b.y);
-      return dx < b.w / 2 + ENTRY_RADIUS && dy < b.h / 2 + ENTRY_RADIUS;
+    const nearestPortal = this.portals.find((p) => {
+      const dx = Math.abs(this.player.x - p.x);
+      const dy = Math.abs(this.player.y - p.y);
+      return dx < p.w / 2 + ENTRY_RADIUS && dy < p.h / 2 + ENTRY_RADIUS;
     });
 
-    if (nearest && !isTyping) {
+    if (nearestPortal && !isTyping) {
       this.entryPrompt
-        .setText(`E: ${nearest.name} 입장`)
+        .setText(`E: ${nearestPortal.name} 입장`)
         .setPosition(width / 2, height - 20)
         .setVisible(true);
 
       if (Phaser.Input.Keyboard.JustDown(this.keyE)) {
         const { userId, nickname, gender, skinColor } = this.userConfig;
         this.scene.start("BuildingScene", {
-          buildingId: nearest.id,
-          buildingName: nearest.name,
+          buildingId: nearestPortal.id,
+          buildingName: nearestPortal.name,
           userId, nickname, gender, skinColor,
         });
       }
